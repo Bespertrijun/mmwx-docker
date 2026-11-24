@@ -33,7 +33,8 @@ services:
       # ---------- 更新策略 ----------
       # 容器内升级由 Watchtower 换镜像完成，关掉面板自带的二进制自更新
       MMWX_UPDATE_REPO: "off"
-      MMWX_AGENT_GITHUB_REPO: "off"
+      # 注意：MMWX_AGENT_GITHUB_REPO 不要设 off！它管的是给子服务器下发
+      # Agent 程序，关了会导致一键安装命令报「没有可用的 Agent 下载来源」
       # 国内网络让面板下载 Agent 走加速（结尾带 /）：
       # MMWX_GH_PROXY: https://ghfast.top/
       # MMWX_GH_TOKEN: "ghp_xxxx"
