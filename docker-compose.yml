@@ -1,10 +1,9 @@
 # ============================================================
-# 服务器端 docker-compose：拉取你 GHCR 上的镜像，Watchtower 自动更新
-# 把 <你的GitHub用户名> 改成实际用户名（全小写）
+# 服务器端 docker-compose：拉取 GHCR 上的镜像，Watchtower 自动更新
 # ============================================================
 services:
   mmwx:
-    image: ghcr.io/<你的GitHub用户名>/mmwx:latest
+    image: ghcr.io/bespertrijun/mmwx:latest
     container_name: mmwx
     restart: always
     pull_policy: always

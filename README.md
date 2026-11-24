@@ -1,11 +1,11 @@
 # 妙妙屋X 开心版 —— Docker 自动同步方案
 
 上游 [zako-li/miaomiaowux](https://github.com/zako-li/miaomiaowux) 一发新版，
-你的 GitHub 仓库自动构建多架构镜像推到 GHCR，服务器上的 Watchtower
+本仓库的 Actions 自动构建多架构镜像推到 GHCR，服务器上的 Watchtower
 自动拉取并重启容器。全链路无人值守。
 
 ```
-上游 Release ──巡检──> GitHub Actions ──构建──> ghcr.io/你/mmwx:latest
+上游 Release ──巡检──> GitHub Actions ──构建──> ghcr.io/bespertrijun/mmwx:latest
                                                       │
 服务器 Watchtower ──每小时轮询──┘   （有新镜像 → 拉取 → 平滑重启 mmwx）
 ```
@@ -13,41 +13,18 @@
 二进制是静态链接的 Go 程序（已实测 v0.6.3 启动正常、`/login` 返回 200），
 镜像基于 Alpine，无 systemd 依赖。
 
-## 一次性设置（约 5 分钟）
+## 服务器部署
 
-**1. 建仓库**
-
-在 GitHub 新建一个仓库（公开私有都行），把本目录所有文件
-（含 `.github/` 和 `Dockerfile`）原样推上去：
+镜像已公开，直接拉取即可：
 
 ```bash
-cd mmwx-docker
-git init && git add -A && git commit -m "init"
-git remote add origin git@github.com:你的用户名/mmwx-docker.git
-git push -u origin main
-```
-
-**2. 跑一次构建**
-
-仓库页面 → Actions → 「同步上游并构建镜像」→ Run workflow
-（force 填 `true`）。之后每 6 小时自动巡检，上游发新版就自动构建。
-构建产物在仓库的 Packages 里：`ghcr.io/你的用户名/mmwx`。
-
-**3. 把镜像包设为公开（可选但推荐）**
-
-Packages → mmwx → Package settings → Change visibility → Public。
-这样服务器拉镜像不用登录；想保持私有的话，服务器上执行一次
-`docker login ghcr.io`（用带 `read:packages` 权限的 PAT）即可。
-
-**4. 服务器启动**
-
-把 `docker-compose.yml` 里的 `<你的GitHub用户名>` 改成实际用户名（全小写），然后：
-
-```bash
+mkdir mmwx && cd mmwx
+curl -fsSL -o docker-compose.yml \
+  https://raw.githubusercontent.com/Bespertrijun/mmwx-docker/main/docker-compose.yml
 docker compose up -d
 ```
 
-完成。之后上游更新 → 最多 6 小时出镜像 → 最多再 1 小时服务器自动换新版。
+之后上游更新 → 最多 6 小时出镜像 → 最多再 1 小时服务器自动换新版。
 
 ## ‼️ 访问前必读（官方同样的坑）
 
