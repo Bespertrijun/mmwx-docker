@@ -62,7 +62,9 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
 
   watchtower:
-    image: containrrr/watchtower
+    # containrrr/watchtower 已归档停更（内置 API 1.25 会被 Docker 29+ 拒绝），
+    # 用社区维护的分支 nickfedor/watchtower，参数/标签完全兼容
+    image: nickfedor/watchtower
     container_name: watchtower
     restart: always
     volumes:
