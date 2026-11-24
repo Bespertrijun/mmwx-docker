@@ -43,6 +43,22 @@ docker compose up -d
 「探针暂时无法访问」属正常）；第一次打开是「创建管理员账号」，
 首个注册用户自动成为管理员。
 
+## 数据库（PostgreSQL）
+
+compose 已默认带一个 `postgres:16-alpine` 容器，面板通过环境变量直连
+（`MMWX_DATABASE_DRIVER=postgres` 等，官方二进制原生支持，已实测启动自动建表
+82 张）。数据库端口**不对外暴露**，只在 compose 内网通信；密码已生成随机值，
+要改的话 mmwx 和 postgres 两处同步改。
+
+- 数据持久化：业务数据在卷 `mmwx-pgdata`，面板附件（证书、订阅文件等）在卷
+  `mmwx-data`，两个都要备份。
+- 连接外部已有的 PostgreSQL：删掉 `postgres` 服务和 `depends_on`，把
+  `MMWX_DATABASE_HOST` 等指向你的实例即可；远程连接按需把
+  `MMWX_DATABASE_SSLMODE` 改成 `require`。
+- **已有 SQLite 数据的旧安装**：面板内置 SQLite → PostgreSQL 迁移校验逻辑，
+  但切换前务必先备份 `mmwx-data` 卷（里面有 `database.json` 和 sqlite 文件），
+  建议先在测试环境验证再动生产。
+
 ## 常用操作
 
 ```bash
@@ -57,7 +73,8 @@ docker logs -f mmwx
 docker logs -f watchtower
 ```
 
-数据在命名卷 `mmwx-data` 里，换镜像、重建容器都不丢。
+数据在命名卷 `mmwx-pgdata`（PostgreSQL）和 `mmwx-data`（面板附件）里，
+换镜像、重建容器都不丢。
 回滚版本：`docker compose.yml` 里把 `latest` 换成具体 tag（如 `mmwx-v0.6.3`），
 再 `docker compose up -d`。
 
@@ -79,7 +96,10 @@ docker logs -f watchtower
 | 变量 | 作用 | 默认 |
 | --- | --- | --- |
 | `PORT` | 监听端口 | `12889` |
-| `MMWX_DATA_DIR` | 数据目录 | `/etc/mmwx/data` |
+| `MMWX_DATA_DIR` | 数据目录（附件、证书等） | `/etc/mmwx/data` |
+| `MMWX_DATABASE_DRIVER` | 数据库类型：`postgres` / `sqlite` | compose 已设 `postgres` |
+| `MMWX_DATABASE_HOST` 等 | PG 地址/端口/库名/用户/密码 | 见 compose |
+| `MMWX_DATABASE_SSLMODE` | PG TLS 模式，内网用 `disable` | `disable` |
 | `MMWX_GH_PROXY` | GitHub 加速前缀（结尾带 `/`） | 空 |
 | `MMWX_GH_TOKEN` | GitHub token，提高 API 限额 | 空 |
 | `MMWX_UPDATE_REPO` | 面板在线更新，容器里建议 `off` | compose 已设 `off` |

@@ -1,5 +1,6 @@
 # ============================================================
 # 服务器端 docker-compose：拉取 GHCR 上的镜像，Watchtower 自动更新
+# 数据库使用 PostgreSQL（面板原生支持，已实测自动建表）
 # ============================================================
 services:
   mmwx:
@@ -7,14 +8,29 @@ services:
     container_name: mmwx
     restart: always
     pull_policy: always
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       # 只监听本机（配合反代/SSH 隧道）就改成 "127.0.0.1:12889:12889"
       - "12889:12889"
     volumes:
+      # 仍需挂载：证书、订阅文件等附件在文件系统里，不只是数据库
       - mmwx-data:/etc/mmwx/data
     environment:
       PORT: 12889
       TZ: Asia/Shanghai
+      # ---------- PostgreSQL ----------
+      MMWX_DATABASE_DRIVER: postgres
+      MMWX_DATABASE_HOST: postgres
+      MMWX_DATABASE_PORT: 5432
+      MMWX_DATABASE_NAME: mmwx
+      MMWX_DATABASE_USER: mmwx
+      # 已生成随机密码，可自行修改（下面 postgres 服务里要同步改）
+      MMWX_DATABASE_PASSWORD: "AcMkawLtzB_ktG6bIwB_-NsOoov_AEGf"
+      # 容器间内网通信不需要 TLS
+      MMWX_DATABASE_SSLMODE: disable
+      # ---------- 更新策略 ----------
       # 容器内升级由 Watchtower 换镜像完成，关掉面板自带的二进制自更新
       MMWX_UPDATE_REPO: "off"
       MMWX_AGENT_GITHUB_REPO: "off"
@@ -24,6 +40,26 @@ services:
     labels:
       # 只让 Watchtower 管这一个容器
       - "com.centurylinklabs.watchtower.enable=true"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: mmwx-postgres
+    restart: always
+    # 不暴露端口，只在 compose 内网给 mmwx 用
+    environment:
+      POSTGRES_DB: mmwx
+      POSTGRES_USER: mmwx
+      POSTGRES_PASSWORD: "AcMkawLtzB_ktG6bIwB_-NsOoov_AEGf"
+      TZ: Asia/Shanghai
+    volumes:
+      - mmwx-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mmwx -d mmwx"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
 
   watchtower:
     image: containrrr/watchtower
@@ -40,3 +76,4 @@ services:
 
 volumes:
   mmwx-data:
+  mmwx-pgdata:
