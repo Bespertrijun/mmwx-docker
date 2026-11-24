@@ -16,7 +16,7 @@ services:
       - "12889:12889"
     volumes:
       # 仍需挂载：证书、订阅文件等附件在文件系统里，不只是数据库
-      - mmwx-data:/etc/mmwx/data
+      - ./data:/etc/mmwx/data
     environment:
       PORT: 12889
       TZ: Asia/Shanghai
@@ -52,7 +52,7 @@ services:
       POSTGRES_PASSWORD: "AcMkawLtzB_ktG6bIwB_-NsOoov_AEGf"
       TZ: Asia/Shanghai
     volumes:
-      - mmwx-pgdata:/var/lib/postgresql/data
+      - ./pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mmwx -d mmwx"]
       interval: 5s
@@ -73,7 +73,3 @@ services:
       --label-enable
     # 每小时检查一次 ghcr.io 上 latest 有没有变化，有就拉新镜像并平滑重启 mmwx
     # --cleanup：更新后删掉旧镜像
-
-volumes:
-  mmwx-data:
-  mmwx-pgdata:
