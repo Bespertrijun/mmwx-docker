@@ -1,0 +1,43 @@
+# ============================================================
+# 服务器端 docker-compose：拉取你 GHCR 上的镜像，Watchtower 自动更新
+# 把 <你的GitHub用户名> 改成实际用户名（全小写）
+# ============================================================
+services:
+  mmwx:
+    image: ghcr.io/<你的GitHub用户名>/mmwx:latest
+    container_name: mmwx
+    restart: always
+    pull_policy: always
+    ports:
+      # 只监听本机（配合反代/SSH 隧道）就改成 "127.0.0.1:12889:12889"
+      - "12889:12889"
+    volumes:
+      - mmwx-data:/etc/mmwx/data
+    environment:
+      PORT: 12889
+      TZ: Asia/Shanghai
+      # 容器内升级由 Watchtower 换镜像完成，关掉面板自带的二进制自更新
+      MMWX_UPDATE_REPO: "off"
+      MMWX_AGENT_GITHUB_REPO: "off"
+      # 国内网络让面板下载 Agent 走加速（结尾带 /）：
+      # MMWX_GH_PROXY: https://ghfast.top/
+      # MMWX_GH_TOKEN: "ghp_xxxx"
+    labels:
+      # 只让 Watchtower 管这一个容器
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >
+      --interval 3600
+      --cleanup
+      --label-enable
+    # 每小时检查一次 ghcr.io 上 latest 有没有变化，有就拉新镜像并平滑重启 mmwx
+    # --cleanup：更新后删掉旧镜像
+
+volumes:
+  mmwx-data:

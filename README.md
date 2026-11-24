@@ -1,0 +1,119 @@
+# 妙妙屋X 开心版 —— Docker 自动同步方案
+
+上游 [zako-li/miaomiaowux](https://github.com/zako-li/miaomiaowux) 一发新版，
+你的 GitHub 仓库自动构建多架构镜像推到 GHCR，服务器上的 Watchtower
+自动拉取并重启容器。全链路无人值守。
+
+```
+上游 Release ──巡检──> GitHub Actions ──构建──> ghcr.io/你/mmwx:latest
+                                                      │
+服务器 Watchtower ──每小时轮询──┘   （有新镜像 → 拉取 → 平滑重启 mmwx）
+```
+
+二进制是静态链接的 Go 程序（已实测 v0.6.3 启动正常、`/login` 返回 200），
+镜像基于 Alpine，无 systemd 依赖。
+
+## 一次性设置（约 5 分钟）
+
+**1. 建仓库**
+
+在 GitHub 新建一个仓库（公开私有都行），把本目录所有文件
+（含 `.github/` 和 `Dockerfile`）原样推上去：
+
+```bash
+cd mmwx-docker
+git init && git add -A && git commit -m "init"
+git remote add origin git@github.com:你的用户名/mmwx-docker.git
+git push -u origin main
+```
+
+**2. 跑一次构建**
+
+仓库页面 → Actions → 「同步上游并构建镜像」→ Run workflow
+（force 填 `true`）。之后每 6 小时自动巡检，上游发新版就自动构建。
+构建产物在仓库的 Packages 里：`ghcr.io/你的用户名/mmwx`。
+
+**3. 把镜像包设为公开（可选但推荐）**
+
+Packages → mmwx → Package settings → Change visibility → Public。
+这样服务器拉镜像不用登录；想保持私有的话，服务器上执行一次
+`docker login ghcr.io`（用带 `read:packages` 权限的 PAT）即可。
+
+**4. 服务器启动**
+
+把 `docker-compose.yml` 里的 `<你的GitHub用户名>` 改成实际用户名（全小写），然后：
+
+```bash
+docker compose up -d
+```
+
+完成。之后上游更新 → 最多 6 小时出镜像 → 最多再 1 小时服务器自动换新版。
+
+## ‼️ 访问前必读（官方同样的坑）
+
+面板前端依赖浏览器 WebCrypto，**只在 HTTPS 或 localhost 下可用**。
+直接开 `http://服务器IP:12889/login` 会「全新安装却显示登录页、登不进去」。
+
+二选一：
+
+1. **SSH 隧道（最快）**：本机终端执行
+   `ssh -L 12889:127.0.0.1:12889 root@服务器IP`，
+   浏览器开 `http://127.0.0.1:12889/login`。
+2. **域名 + 反代 HTTPS**：Caddy / Nginx 反代到 `127.0.0.1:12889`，
+   访问 `https://你的域名/login`。
+
+另外：地址**一定要带 `/login`**（根路径 `/` 是探针伪装页，显示
+「探针暂时无法访问」属正常）；第一次打开是「创建管理员账号」，
+首个注册用户自动成为管理员。
+
+## 常用操作
+
+```bash
+# 手动立刻检查上游有没有新版（不等定时）
+# → GitHub 仓库 Actions 页点 Run workflow 即可
+
+# 服务器上手动更新（不等 Watchtower）
+docker compose pull mmwx && docker compose up -d mmwx
+
+# 看日志
+docker logs -f mmwx
+docker logs -f watchtower
+```
+
+数据在命名卷 `mmwx-data` 里，换镜像、重建容器都不丢。
+回滚版本：`docker compose.yml` 里把 `latest` 换成具体 tag（如 `mmwx-v0.6.3`），
+再 `docker compose up -d`。
+
+## 工作原理说明
+
+- **巡检**：Actions 每 6 小时查上游 Releases，取第一个匹配
+  `mmwx` / `mmwx-v*` 的 tag（与官方安装脚本同一套规则，不会误中
+  `mmwx-agent-*`），和仓库里的 `UPSTREAM_VERSION` 文件对比，变了才构建。
+- **构建**：Buildx 一次出 `linux/amd64` + `linux/arm64` 两个架构，
+  打上 `latest` 和上游 tag 两个标签推到 GHCR，然后 bot 把新版本号
+  提交回 `UPSTREAM_VERSION`。
+- **更新**：Watchtower 只监控带 `watchtower.enable=true` 标签的 mmwx
+  容器，发现 `latest` 镜像有更新就拉取并平滑重启，`--cleanup` 顺手清掉旧镜像。
+- 面板自带的在线更新已用 `MMWX_UPDATE_REPO=off` 关掉——容器里换二进制
+  没有意义，升级统一走「换镜像」这条路，可回滚、可追溯。
+
+## 环境变量（面板）
+
+| 变量 | 作用 | 默认 |
+| --- | --- | --- |
+| `PORT` | 监听端口 | `12889` |
+| `MMWX_DATA_DIR` | 数据目录 | `/etc/mmwx/data` |
+| `MMWX_GH_PROXY` | GitHub 加速前缀（结尾带 `/`） | 空 |
+| `MMWX_GH_TOKEN` | GitHub token，提高 API 限额 | 空 |
+| `MMWX_UPDATE_REPO` | 面板在线更新，容器里建议 `off` | compose 已设 `off` |
+| `MMWX_AGENT_GITHUB_REPO` | Agent 下载来源，`off` 关闭 | compose 已设 `off` |
+| `MMWX_AGENT_DOWNLOAD_BASE` | 自建 Agent 镜像源 | 空 |
+
+## 文件清单
+
+| 文件 | 作用 |
+| --- | --- |
+| `Dockerfile` | 镜像构建（Alpine + 静态二进制，含健康检查） |
+| `.github/workflows/auto-build.yml` | 定时巡检上游 + 自动构建推送 GHCR |
+| `docker-compose.yml` | 服务器端：mmwx + Watchtower 自动更新 |
+| `UPSTREAM_VERSION` | 记录上次构建的上游 tag（Actions 自动维护） |
